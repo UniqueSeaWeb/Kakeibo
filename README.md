@@ -44,10 +44,10 @@ npm run deploy
 
 3. **Cloudflare Access を有効化**
    1. Cloudflare ダッシュボード → Zero Trust を開き、初回はチーム名を決めて Free プランを選択
-   2. Workers & Pages → `kakeibo` → 設定 → ドメインとルート → `workers.dev` の **Cloudflare Access を有効にする**
+   2. Workers & Pages → `kakeibo` → **Access** タブで Access を有効化（すべてのトラフィック）
    3. 「Cloudflare Access を管理」から、許可するメールアドレスを自分のものだけにする
    4. Access アプリケーションの **AUD タグ** をコピー
-4. `wrangler.jsonc` の `TEAM_DOMAIN`（`https://<チーム名>.cloudflareaccess.com`）、`POLICY_AUD`（AUD タグ）、`ALLOWED_EMAILS`（自分のメールアドレス）を設定して、もう一度 `npm run deploy`
+4. `wrangler.jsonc` の `TEAM_DOMAIN`（`https://<チーム名>.cloudflareaccess.com`）と `POLICY_AUD`（AUD タグ）を設定して `npm run deploy`。許可するメールアドレスは `npx wrangler secret put ALLOWED_EMAILS` で登録
 5. スマホで URL を開き、メールに届くコードでログイン →「設定 → クラウド同期」で合言葉を設定
 
 2 台目以降の端末は、同じ URL でログインして合言葉を入力するだけで同じデータを使えます。
@@ -73,14 +73,14 @@ npm test                                      # JWT 検証のテスト
 ```
 public/               画面（静的ファイル）
   index.html
-  _headers            セキュリティヘッダー（CSP など）
   css/style.css       スタイル（余白は 8 の倍数、ダークモード対応）
   js/categories.js    カテゴリ定義
   js/store.js         端末内の保存・固定費の自動記録・同期の変更管理
   js/sync.js          暗号化とクラウド同期
   js/app.js           画面の処理
   sw.js               オフライン対応（Service Worker）
-src/worker.js         API（Access JWT 検証、暗号文の保存・取得）
+src/worker.js         API（Access JWT 検証、暗号文の保存・取得）と画面ファイルの配信（CSP などのヘッダー付与）
+scripts/build-static.mjs  public/ を Worker に同梱するモジュールを生成（デプロイ時に自動実行）
 migrations/           D1 のテーブル定義
 wrangler.jsonc        Cloudflare の設定
 ```
