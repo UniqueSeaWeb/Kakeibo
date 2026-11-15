@@ -1,6 +1,6 @@
 'use strict';
 // オフラインでも使えるようにアプリ本体をキャッシュする
-const CACHE = 'kakeibo-v2';
+const CACHE = 'kakeibo-v3';
 const ASSETS = [
   './',
   './index.html',

@@ -422,3 +422,8 @@ input[type="radio"]:focus-visible + .category-option { outline: 3px solid var(--
 .sync-info dt { color: var(--text-sub); font-size: 14px; }
 .sync-info dd { font-weight: 700; text-align: right; overflow-wrap: anywhere; }
 .icon-inline { width: 16px; height: 16px; vertical-align: -2px; }
+
+.badge-mail { color: #2f6fb0; background: color-mix(in srgb, #2f6fb0 14%, transparent); }
+@media (prefers-color-scheme: dark) {
+  .badge-mail { color: #7fb4ea; }
+}

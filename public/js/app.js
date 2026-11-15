@@ -250,7 +250,9 @@
             el('button', { type: 'button', class: 'entry', style: `--cat:${c.color}`, onclick: () => startEdit(e), 'aria-label': `${c.name} ${fmt(e.amount)} ${e.memo || ''} を編集` },
               el('span', { class: 'category-icon' }, icon(c.id)),
               el('span', { class: 'entry-body' },
-                el('span', { class: 'entry-cat' }, c.name, e.recurringId ? el('span', { class: 'badge' }, '固定') : null),
+                el('span', { class: 'entry-cat' }, c.name,
+                  e.recurringId ? el('span', { class: 'badge' }, '固定') : null,
+                  e.source === 'mail' ? el('span', { class: 'badge badge-mail' }, 'メール') : null),
                 e.memo ? el('span', { class: 'entry-memo' }, e.memo) : null),
               el('span', { class: 'entry-amount' }, fmt(e.amount))));
         }))));
@@ -557,6 +559,9 @@
       $('#sync-pending').textContent = `${Store.pendingCount}件`;
       $('#sync-now').disabled = st.state === 'syncing';
     }
+    $('#mail-status').textContent = Sync.inboxReady
+      ? '受け取り準備ができています。Gmail 側の設定を済ませると、届いたメールから自動で記録されます。'
+      : 'クラウド同期を有効にすると利用できます。';
   }
 
   function showFormError(id, msg) {
@@ -581,7 +586,9 @@
   function initSync() {
     Sync.onStatus(renderSync);
     Store.onChange(() => { Sync.schedule(); renderSync(); });
-    document.addEventListener('kakeibo:remote-change', () => {
+    document.addEventListener('kakeibo:remote-change', (ev) => {
+      const n = ev.detail && ev.detail.mailImported;
+      if (n) toast(`メールから${n}件の支出を記録しました`);
       Store.applyRecurring(thisMonth());
       updateMemoSuggestions();
       render();
@@ -629,7 +636,7 @@
 
     $('#sync-now').addEventListener('click', async () => {
       await Sync.syncNow();
-      if (Sync.status.state === 'idle') toast('同期しました');
+      if (Sync.status.state === 'idle' && !Sync.lastMailImported) toast('同期しました');
     });
     $('#sync-reload').addEventListener('click', () => location.reload());
     $('#sync-disconnect').addEventListener('click', async () => {

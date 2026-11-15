@@ -25,5 +25,9 @@
     // 利用を許可するメールアドレス（ALLOWED_EMAILS, カンマ区切り）は個人情報のため
     // `npx wrangler secret put ALLOWED_EMAILS` でシークレットとして登録します
   },
+  // メール取り込みで使う生成 AI（Workers AI）
+  "ai": { "binding": "AI" },
+  // INGEST_USER（取り込み先のメールアドレス）と INGEST_CLIENT_ID（Access サービストークンの Client ID）は
+  // `npx wrangler secret put` でシークレットとして登録します
   "observability": { "enabled": true }
 }

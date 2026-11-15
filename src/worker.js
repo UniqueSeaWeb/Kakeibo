@@ -9,12 +9,14 @@
  */
 
 import STATIC_FILES from './static.generated.js';
+import { extractExpenses, sealForRecipient, inboxId } from './ingest.js';
 
 const MAX_BODY_BYTES = 512 * 1024;
 const MAX_CHANGES = 100;
 const MAX_RECORD_DATA = 16 * 1024;
 const PULL_LIMIT = 500;
 const ID_RE = /^[er]:[A-Za-z0-9-]{1,80}$/;
+const INBOX_ID_RE = /^mail-[0-9a-f]{24}-\d{1,2}$/;
 const B64_RE = /^[A-Za-z0-9+/]+={0,2}$/;
 
 const SECURITY_HEADERS = {
@@ -51,8 +53,8 @@ async function getSigningKeys(certsUrl, forceRefresh = false) {
   return jwksCache.keys;
 }
 
-/** 検証に成功したらメールアドレスを返す。失敗時は null */
-export async function verifyAccessJwt(token, env) {
+/** 署名・発行元・宛先・有効期限を検証し、成功したらペイロードを返す。失敗時は null */
+export async function verifyAccessToken(token, env) {
   if (!token || !env.TEAM_DOMAIN || !env.POLICY_AUD) return null;
   const parts = token.split('.');
   if (parts.length !== 3) return null;
@@ -72,7 +74,6 @@ export async function verifyAccessJwt(token, env) {
   if (!auds.includes(env.POLICY_AUD)) return null;
   if (typeof payload.exp !== 'number' || payload.exp < now - 30) return null;
   if (typeof payload.nbf === 'number' && payload.nbf > now + 30) return null;
-  if (typeof payload.email !== 'string' || !payload.email) return null;
 
   const certsUrl = `${teamDomain}/cdn-cgi/access/certs`;
   let keys = await getSigningKeys(certsUrl);
@@ -92,22 +93,43 @@ export async function verifyAccessJwt(token, env) {
     new TextEncoder().encode(`${parts[0]}.${parts[1]}`)
   );
   if (!ok) return null;
+  return payload;
+}
 
+/** 人（ブラウザ）のログイン：検証に成功したらメールアドレスを返す。失敗時は null */
+export async function verifyAccessJwt(token, env) {
+  const payload = await verifyAccessToken(token, env);
+  if (!payload || typeof payload.email !== 'string' || !payload.email) return null;
   const email = payload.email.toLowerCase();
   const allowed = (env.ALLOWED_EMAILS || '').split(',').map((s) => s.trim().toLowerCase()).filter(Boolean);
   if (allowed.length && !allowed.includes(email)) return null;
   return email;
 }
 
+/** メール取り込み用のサービストークン：登録済みの Client ID と一致する場合のみ true */
+export async function verifyServiceToken(token, env) {
+  if (!env.INGEST_CLIENT_ID) return false;
+  const payload = await verifyAccessToken(token, env);
+  return !!payload && !payload.email && payload.common_name === env.INGEST_CLIENT_ID;
+}
+
+/** 戻り値: { kind: 'user', email } | { kind: 'service' } | null */
 async function authenticate(request, env) {
+  const token = request.headers.get('Cf-Access-Jwt-Assertion');
   // ローカル開発専用（.dev.vars で DEV_USER を設定し、かつ localhost からのアクセスのみ）
   const host = new URL(request.url).hostname;
-  if (env.DEV_USER && (host === 'localhost' || host === '127.0.0.1')) return env.DEV_USER;
-  try {
-    return await verifyAccessJwt(request.headers.get('Cf-Access-Jwt-Assertion'), env);
-  } catch {
-    return null;
+  if (env.DEV_USER && (host === 'localhost' || host === '127.0.0.1')) {
+    if (env.DEV_INGEST_KEY && request.headers.get('X-Dev-Ingest-Key') === env.DEV_INGEST_KEY) return { kind: 'service' };
+    return { kind: 'user', email: env.DEV_USER };
   }
+  try {
+    const email = await verifyAccessJwt(token, env);
+    if (email) return { kind: 'user', email };
+    if (await verifyServiceToken(token, env)) return { kind: 'service' };
+  } catch {
+    // 検証中の例外は拒否として扱う
+  }
+  return null;
 }
 
 // ---------- 入力検証 ----------
@@ -143,10 +165,77 @@ function sameOrigin(request) {
 // ---------- API ----------
 
 async function getKeyInfo(env, user) {
-  const row = await env.DB.prepare('SELECT key_salt, key_iter, key_wrapped FROM users WHERE user = ?')
-    .bind(user).first();
+  const row = await env.DB.prepare(
+    'SELECT key_salt, key_iter, key_wrapped, inbox_pub, inbox_priv_wrapped FROM users WHERE user = ?'
+  ).bind(user).first();
   if (!row || !row.key_wrapped) return json({ initialized: false });
-  return json({ initialized: true, salt: row.key_salt, iterations: row.key_iter, wrappedKey: row.key_wrapped });
+  return json({
+    initialized: true, salt: row.key_salt, iterations: row.key_iter, wrappedKey: row.key_wrapped,
+    inboxPublicKey: row.inbox_pub || null, inboxPrivateKey: row.inbox_priv_wrapped || null
+  });
+}
+
+// ---------- メール取り込み ----------
+
+async function putInboxKey(request, env, user) {
+  const { publicKey, wrappedPrivateKey } = (await readJson(request)) || {};
+  if (!isB64(publicKey, 128) || !isB64(wrappedPrivateKey, 1024)) return fail(400, 'invalid_key_info');
+  // 公開鍵は最初の 1 回だけ登録できる
+  const res = await env.DB.prepare(
+    `UPDATE users SET inbox_pub = ?2, inbox_priv_wrapped = ?3
+     WHERE user = ?1 AND key_wrapped IS NOT NULL AND inbox_pub IS NULL`
+  ).bind(user, publicKey, wrappedPrivateKey).run();
+  if (!res.meta.changes) return fail(409, 'already_initialized');
+  return json({ ok: true }, 201);
+}
+
+async function getInbox(env, user) {
+  const { results } = await env.DB.prepare(
+    'SELECT id, data FROM inbox WHERE user = ? ORDER BY created_at LIMIT 100'
+  ).bind(user).all();
+  return json({ items: results });
+}
+
+async function ackInbox(request, env, user) {
+  const { ids } = (await readJson(request)) || {};
+  if (!Array.isArray(ids) || ids.length > 100 || !ids.every((id) => typeof id === 'string' && INBOX_ID_RE.test(id))) {
+    return fail(400, 'invalid_ids');
+  }
+  if (ids.length) {
+    await env.DB.batch(ids.map((id) => env.DB.prepare('DELETE FROM inbox WHERE user = ? AND id = ?').bind(user, id)));
+  }
+  return json({ ok: true });
+}
+
+async function ingest(request, env) {
+  const user = (env.INGEST_USER || '').trim().toLowerCase();
+  if (!user || !env.AI) return fail(503, 'ingest_not_configured');
+  const mail = (await readJson(request)) || {};
+  if (typeof mail.messageId !== 'string' || !mail.messageId || mail.messageId.length > 300) return fail(400, 'invalid_mail');
+  for (const k of ['from', 'subject', 'date', 'body']) {
+    if (mail[k] != null && typeof mail[k] !== 'string') return fail(400, 'invalid_mail');
+  }
+
+  const row = await env.DB.prepare('SELECT inbox_pub FROM users WHERE user = ?').bind(user).first();
+  if (!row || !row.inbox_pub) return fail(409, 'inbox_not_ready');
+
+  // 同じメールの二重取り込みを防ぐ（ハッシュのみ記録）
+  const msgHash = (await inboxId(mail.messageId, 0)).slice(5, -2);
+  const done = await env.DB.prepare('SELECT 1 FROM ingested WHERE user = ? AND msg_hash = ?').bind(user, msgHash).first();
+  if (done) return json({ status: 'duplicate' });
+
+  const items = await extractExpenses(env, mail);
+  const now = Date.now();
+  const stmts = [];
+  for (let i = 0; i < items.length; i++) {
+    const id = await inboxId(mail.messageId, i);
+    const data = await sealForRecipient(row.inbox_pub, id, { id, ...items[i] });
+    stmts.push(env.DB.prepare('INSERT OR IGNORE INTO inbox (user, id, data, created_at) VALUES (?, ?, ?, ?)').bind(user, id, data, now));
+  }
+  stmts.push(env.DB.prepare('INSERT OR IGNORE INTO ingested (user, msg_hash, created_at) VALUES (?, ?, ?)').bind(user, msgHash, now));
+  await env.DB.batch(stmts);
+  // 抽出結果（金額など）は応答に含めない
+  return json({ status: items.length ? 'added' : 'skipped', count: items.length });
 }
 
 async function putKeyInfo(request, env, user) {
@@ -219,12 +308,22 @@ async function sync(request, env, user) {
 }
 
 async function handleApi(request, env) {
-  const user = await authenticate(request, env);
-  if (!user) return fail(401, 'unauthorized');
+  const auth = await authenticate(request, env);
+  if (!auth) return fail(401, 'unauthorized');
 
   const { pathname } = new URL(request.url);
   const method = request.method;
+
+  // サービストークン（Gmail 連携）は取り込み API だけを使える
+  if (auth.kind === 'service') {
+    if (pathname === '/api/ingest' && method === 'POST') return ingest(request, env);
+    return fail(403, 'forbidden');
+  }
+  const user = auth.email;
   if (method !== 'GET' && !sameOrigin(request)) return fail(403, 'forbidden_origin');
+  if (pathname === '/api/inbox-key' && method === 'PUT') return putInboxKey(request, env, user);
+  if (pathname === '/api/inbox' && method === 'GET') return getInbox(env, user);
+  if (pathname === '/api/inbox/ack' && method === 'POST') return ackInbox(request, env, user);
 
   if (pathname === '/api/me' && method === 'GET') return json({ email: user });
   if (pathname === '/api/key') {

@@ -87,6 +87,19 @@ const Store = (() => {
       save();
       return entry;
     },
+    /** メールから取り込んだ明細を追加（同じ ID がすでにあれば何もしない） */
+    addMailEntry(item) {
+      if (state.entries.some((x) => x.id === item.id)) return false;
+      const entry = {
+        id: item.id, createdAt: Date.now(), date: item.date, amount: item.amount,
+        category: item.category, memo: item.merchant || '', source: 'mail'
+      };
+      if (!isValidEntry(entry)) return false;
+      state.entries.push(entry);
+      markDirty(`e:${entry.id}`);
+      save();
+      return true;
+    },
     updateEntry(id, data) {
       const e = state.entries.find((x) => x.id === id);
       if (!e) return null;

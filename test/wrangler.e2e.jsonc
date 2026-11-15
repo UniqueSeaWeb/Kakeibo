@@ -1,0 +1,31 @@
+{
+  "$schema": "../node_modules/wrangler/config-schema.json",
+  "name": "kakeibo-e2e",
+  "main": "dev-worker.js",
+  "compatibility_date": "2026-10-28",
+  "workers_dev": true,
+  "preview_urls": false,
+  // 画面ファイル（public/）は Worker に同梱して配信する
+  "build": {
+    "command": "node ../scripts/build-static.mjs",
+    "watch_dir": "../public"
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "kakeibo",
+      "database_id": "3eff77b8-6744-47b8-b507-fc02de8009f3",
+      "migrations_dir": "../migrations"
+    }
+  ],
+  "vars": {
+    // Cloudflare Access の設定値（秘密情報ではありません）
+    "TEAM_DOMAIN": "https://wild-haze-46c6.cloudflareaccess.com",
+    "POLICY_AUD": "1b3b8869b32f6d1c275d70e226eddac4a4cb668f4de431213af1236a581a3f8c"
+    // 利用を許可するメールアドレス（ALLOWED_EMAILS, カンマ区切り）は個人情報のため
+    // `npx wrangler secret put ALLOWED_EMAILS` でシークレットとして登録します
+  },
+  // INGEST_USER（取り込み先のメールアドレス）と INGEST_CLIENT_ID（Access サービストークンの Client ID）は
+  // `npx wrangler secret put` でシークレットとして登録します
+  "observability": { "enabled": true }
+}

@@ -57,9 +57,9 @@ const Sync = (() => {
       tx.onerror = () => { db.close(); reject(tx.error); };
     });
   }
-  const loadKey = () => idbOp('readonly', (s) => s.get('dek'));
-  const storeKey = (key) => idbOp('readwrite', (s) => s.put(key, 'dek'));
-  const deleteKey = () => idbOp('readwrite', (s) => s.delete('dek'));
+  const loadKey = (name = 'dek') => idbOp('readonly', (s) => s.get(name));
+  const storeKey = (key, name = 'dek') => idbOp('readwrite', (s) => s.put(key, name));
+  const deleteKey = (name = 'dek') => idbOp('readwrite', (s) => s.delete(name));
 
   // ---------- 暗号 ----------
   async function deriveKek(passphrase, salt, iterations) {
@@ -86,6 +86,73 @@ const Sync = (() => {
       dek, bytes.subarray(12)
     );
     return JSON.parse(dec.decode(pt));
+  }
+
+  // ---------- メール取り込み（公開鍵暗号） ----------
+  const INBOX_KEY_AAD = enc.encode('kakeibo-inbox-key-v1');
+  let inboxKey = null;
+  let inboxChecked = false;
+
+  /** メール取り込み用の鍵ペアを用意する（初回は作成してサーバーへ登録、2台目以降は復元） */
+  async function ensureInboxKey(info) {
+    if (inboxKey) return;
+    inboxKey = (await loadKey('inbox').catch(() => null)) || null;
+    if (inboxKey) return;
+    if (!info) info = await api('/api/key');
+    if (info.inboxPrivateKey) {
+      const w = fromB64(info.inboxPrivateKey);
+      const pkcs8 = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: w.subarray(0, 12), additionalData: INBOX_KEY_AAD }, dek, w.subarray(12));
+      inboxKey = await crypto.subtle.importKey('pkcs8', pkcs8, { name: 'ECDH', namedCurve: 'P-256' }, false, ['deriveBits']);
+    } else {
+      const pair = await crypto.subtle.generateKey({ name: 'ECDH', namedCurve: 'P-256' }, true, ['deriveBits']);
+      const pub = await crypto.subtle.exportKey('raw', pair.publicKey);
+      const pkcs8 = new Uint8Array(await crypto.subtle.exportKey('pkcs8', pair.privateKey));
+      const iv = crypto.getRandomValues(new Uint8Array(12));
+      const wrapped = await crypto.subtle.encrypt({ name: 'AES-GCM', iv, additionalData: INBOX_KEY_AAD }, dek, pkcs8);
+      pkcs8.fill(0);
+      await api('/api/inbox-key', {
+        method: 'PUT',
+        body: JSON.stringify({ publicKey: toB64(pub), wrappedPrivateKey: toB64(concat(iv, new Uint8Array(wrapped))) })
+      });
+      inboxKey = await crypto.subtle.importKey('pkcs8', await crypto.subtle.exportKey('pkcs8', pair.privateKey),
+        { name: 'ECDH', namedCurve: 'P-256' }, false, ['deriveBits']);
+    }
+    await storeKey(inboxKey, 'inbox');
+  }
+
+  async function openInboxItem(id, data) {
+    const bytes = fromB64(data);
+    const epk = bytes.subarray(0, 65);
+    const pub = await crypto.subtle.importKey('raw', epk, { name: 'ECDH', namedCurve: 'P-256' }, false, []);
+    const shared = await crypto.subtle.deriveBits({ name: 'ECDH', public: pub }, inboxKey, 256);
+    const hkdf = await crypto.subtle.importKey('raw', shared, 'HKDF', false, ['deriveKey']);
+    const key = await crypto.subtle.deriveKey(
+      { name: 'HKDF', hash: 'SHA-256', salt: epk, info: enc.encode('kakeibo-inbox-v1') },
+      hkdf, { name: 'AES-GCM', length: 256 }, false, ['decrypt']
+    );
+    const pt = await crypto.subtle.decrypt(
+      { name: 'AES-GCM', iv: bytes.subarray(65, 77), additionalData: enc.encode(`kakeibo:inbox:${id}`) }, key, bytes.subarray(77)
+    );
+    return JSON.parse(dec.decode(pt));
+  }
+
+  /** サーバーの取り込み待ちを受け取り、明細に追加する */
+  async function pullInbox() {
+    const { items } = await api('/api/inbox');
+    if (!items.length) return 0;
+    let added = 0;
+    const ids = [];
+    for (const it of items) {
+      try {
+        const obj = await openInboxItem(it.id, it.data);
+        if (obj.id === it.id && Store.addMailEntry(obj)) added++;
+        ids.push(it.id);
+      } catch {
+        console.warn('復号できない取り込みデータをスキップしました', it.id);
+      }
+    }
+    if (ids.length) await api('/api/inbox/ack', { method: 'POST', body: JSON.stringify({ ids }) });
+    return added;
   }
 
   // ---------- API ----------
@@ -129,7 +196,16 @@ const Sync = (() => {
     }
     try {
       const me = await api('/api/me');
-      const { initialized } = await api('/api/key');
+      const keyInfo = await api('/api/key');
+      const { initialized } = keyInfo;
+      if (initialized && dek) {
+        try {
+          await ensureInboxKey(keyInfo);
+          inboxChecked = true;
+        } catch (e) {
+          console.warn('メール取り込み用の鍵を準備できませんでした', e);
+        }
+      }
       const result = { available: true, email: me.email, initialized, connected: !!dek };
       if (!initialized) setStatus('setup');
       else if (!dek) setStatus('locked');
@@ -194,7 +270,10 @@ const Sync = (() => {
   async function disconnect() {
     clearTimeout(timer);
     await deleteKey();
+    await deleteKey('inbox').catch(() => {});
     dek = null;
+    inboxKey = null;
+    inboxChecked = false;
     Store.resetSync();
     setStatus('locked');
   }
@@ -220,8 +299,25 @@ const Sync = (() => {
       await applyRecords(res);
       if (!res.hasMore) break;
     }
+    // 3. メールから取り込んだ明細（失敗しても通常の同期には影響させない）
+    try {
+      if (!inboxChecked) {
+        await ensureInboxKey();
+        inboxChecked = true;
+      }
+      const imported = await pullInbox();
+      if (imported) {
+        mailImported += imported;
+        changedByRemote = true;
+      }
+    } catch (e) {
+      if (e.code === 'login_required' || e.code === 'offline') throw e;
+      console.warn('メールからの取り込みに失敗しました', e);
+    }
     setStatus('idle');
   }
+  let mailImported = 0;
+  let lastMailImported = 0;
 
   let changedByRemote = false;
   async function applyRecords(res) {
@@ -248,7 +344,9 @@ const Sync = (() => {
       })
       .finally(() => {
         running = null;
-        if (changedByRemote) document.dispatchEvent(new CustomEvent('kakeibo:remote-change'));
+        lastMailImported = mailImported;
+        if (changedByRemote) document.dispatchEvent(new CustomEvent('kakeibo:remote-change', { detail: { mailImported } }));
+        mailImported = 0;
       });
     return running;
   }
@@ -264,6 +362,8 @@ const Sync = (() => {
     check, setup, unlock, disconnect, syncNow, schedule,
     get status() { return status; },
     get connected() { return !!dek; },
+    get inboxReady() { return !!inboxKey; },
+    get lastMailImported() { return lastMailImported; },
     onStatus(fn) { listeners.add(fn); },
     PBKDF2_ITERATIONS
   };

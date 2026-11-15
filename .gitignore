@@ -3,3 +3,5 @@ node_modules/
 .dev.vars
 .dev.vars.*
 src/static.generated.js
+test/.wrangler/
+test/.dev.vars

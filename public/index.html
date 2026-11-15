@@ -37,6 +37,7 @@
     <symbol id="i-right" viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"/></symbol>
     <symbol id="i-trash" viewBox="0 0 24 24"><path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14"/></symbol>
     <symbol id="i-cloud" viewBox="0 0 24 24"><path d="M17.5 19H7a5 5 0 1 1 1.1-9.9A6 6 0 0 1 19.6 11 4 4 0 0 1 17.5 19z"/></symbol>
+    <symbol id="i-mail" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/></symbol>
     <symbol id="i-lock" viewBox="0 0 24 24"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></symbol>
     <symbol id="i-repeat" viewBox="0 0 24 24"><path d="m17 2 4 4-4 4M3 11V9a3 3 0 0 1 3-3h15M7 22l-4-4 4-4M21 13v2a3 3 0 0 1-3 3H3"/></symbol>
   </svg>
@@ -189,6 +190,14 @@
           <button type="button" class="btn btn-ghost" id="sync-reload" hidden>再読み込みしてログイン</button>
           <button type="button" class="btn btn-ghost" id="sync-disconnect">この端末の同期を解除</button>
         </div>
+      </section>
+
+      <section class="card" aria-labelledby="mail-heading">
+        <h3 id="mail-heading" class="card-title">
+          <svg class="icon" aria-hidden="true"><use href="#i-mail"/></svg>メールから自動記録
+        </h3>
+        <p class="help">カードの利用通知や公共料金のお知らせメールを生成 AI が読み取り、支出として自動で記録します。読み取った結果は暗号化して保存され、メール本文は保存されません。</p>
+        <p class="help" id="mail-status"></p>
       </section>
 
       <section class="card" aria-labelledby="recurring-heading">

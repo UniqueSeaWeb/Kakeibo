@@ -62,3 +62,14 @@ test('設定が不足していれば拒否（フェイルクローズ）', async
   assert.equal(await verifyAccessJwt(t, { ...env, POLICY_AUD: '' }), null);
   assert.equal(await verifyAccessJwt(t, { ...env, TEAM_DOMAIN: '' }), null);
 });
+
+import { verifyServiceToken } from '../src/worker.js';
+const svcEnv = { ...env, INGEST_CLIENT_ID: 'svc-client.access' };
+test('サービストークン：登録した Client ID のみ許可', async () => {
+  const svc = await sign({ email: undefined, common_name: 'svc-client.access', sub: '' });
+  assert.equal(await verifyServiceToken(svc, svcEnv), true);
+  assert.equal(await verifyServiceToken(await sign({ email: undefined, common_name: 'other.access' }), svcEnv), false);
+  assert.equal(await verifyServiceToken(svc, env), false);                 // 未設定なら拒否
+  assert.equal(await verifyServiceToken(await sign({}), svcEnv), false);   // 人のログインは対象外
+  assert.equal(await verifyAccessJwt(svc, svcEnv), null);                  // サービストークンで人の API は使えない
+});
