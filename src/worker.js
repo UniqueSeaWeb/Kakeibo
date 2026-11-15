@@ -8,6 +8,8 @@
  * - 未設定・検証失敗時はすべて拒否（フェイルクローズ）
  */
 
+import STATIC_FILES from './static.generated.js';
+
 const MAX_BODY_BYTES = 512 * 1024;
 const MAX_CHANGES = 100;
 const MAX_RECORD_DATA = 16 * 1024;
@@ -249,6 +251,39 @@ export default {
         return fail(500, 'internal_error');
       }
     }
-    return env.ASSETS.fetch(request);
+    return serveStatic(request);
   }
 };
+
+// ---------- 画面ファイルの配信 ----------
+
+const PAGE_HEADERS = {
+  'Content-Security-Policy': "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; manifest-src 'self'; worker-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'; object-src 'none'",
+  'X-Content-Type-Options': 'nosniff',
+  'X-Frame-Options': 'DENY',
+  'Referrer-Policy': 'no-referrer',
+  'Strict-Transport-Security': 'max-age=31536000',
+  'Permissions-Policy': 'camera=(), microphone=(), geolocation=(), payment=(), usb=()',
+  'Cross-Origin-Opener-Policy': 'same-origin',
+  'X-Robots-Tag': 'noindex, nofollow',
+  'Cache-Control': 'private, no-cache'
+};
+
+const decoded = new Map();
+function body(file) {
+  if (!decoded.has(file.etag)) decoded.set(file.etag, Uint8Array.from(atob(file.b64), (c) => c.charCodeAt(0)));
+  return decoded.get(file.etag);
+}
+
+export function serveStatic(request) {
+  if (request.method !== 'GET' && request.method !== 'HEAD') {
+    return new Response('Method Not Allowed', { status: 405, headers: { ...PAGE_HEADERS, Allow: 'GET, HEAD' } });
+  }
+  let { pathname } = new URL(request.url);
+  if (pathname.endsWith('/')) pathname += 'index.html';
+  const file = Object.prototype.hasOwnProperty.call(STATIC_FILES, pathname) ? STATIC_FILES[pathname] : null;
+  if (!file) return new Response('Not Found', { status: 404, headers: { ...PAGE_HEADERS, 'Content-Type': 'text/plain; charset=utf-8' } });
+  const headers = { ...PAGE_HEADERS, 'Content-Type': file.type, ETag: file.etag };
+  if (request.headers.get('If-None-Match') === file.etag) return new Response(null, { status: 304, headers });
+  return new Response(request.method === 'HEAD' ? null : body(file), { headers });
+}

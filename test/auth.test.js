@@ -1,7 +1,7 @@
 // Cloudflare Access の JWT 検証テスト
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { verifyAccessJwt } from '../src/worker.js';
+import { verifyAccessJwt } from '../src/worker.js'; // 事前に npm run build が必要
 
 const TEAM = 'https://example-team.cloudflareaccess.com';
 const AUD = 'test-aud-tag';
