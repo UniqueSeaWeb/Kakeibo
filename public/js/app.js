@@ -37,7 +37,7 @@
     const node = document.createElement(tag);
     for (const [k, v] of Object.entries(attrs)) {
       if (k === 'class') node.className = v;
-      else if (k === 'style') node.setAttribute('style', v);
+      else if (k === 'style') node.style.cssText = v; // CSP（style-src 'self'）に適合させるため CSSOM で設定
       else if (k.startsWith('on')) node.addEventListener(k.slice(2), v);
       else node.setAttribute(k, v);
     }
@@ -499,22 +499,151 @@
       }
     });
     $('#clear-all').addEventListener('click', () => {
-      if (!confirm('すべての記録と固定費を削除します。元に戻せません。よろしいですか？')) return;
+      const msg = Sync.connected
+        ? 'すべての記録と固定費を削除します。クラウドと、同期している他の端末からも削除されます。元に戻せません。よろしいですか？'
+        : 'すべての記録と固定費を削除します。元に戻せません。よろしいですか？';
+      if (!confirm(msg)) return;
       Store.clear();
       render();
       toast('すべてのデータを削除しました');
     });
 
-    // 月が変わったときに固定費を自動記録
+    // 月が変わったときに固定費を自動記録し、クラウドと同期
     document.addEventListener('visibilitychange', () => {
-      if (document.visibilityState === 'visible' && Store.applyRecurring(thisMonth())) render();
+      if (document.visibilityState !== 'visible') return;
+      if (Store.applyRecurring(thisMonth())) render();
+      Sync.syncNow();
     });
 
+    initSync();
     render();
 
     if ('serviceWorker' in navigator && location.protocol !== 'file:') {
       navigator.serviceWorker.register('sw.js').catch((e) => console.warn('Service Worker 登録失敗', e));
     }
+  }
+
+  // ---------- クラウド同期 ----------
+  let syncInfo = { available: false };
+
+  const STATUS_TEXT = {
+    unknown: '確認中…',
+    unavailable: '利用できません',
+    setup: '未設定',
+    locked: 'この端末は未接続です',
+    idle: '同期済み',
+    syncing: '同期中…',
+    offline: 'オフライン',
+    login: '再ログインが必要です',
+    error: 'エラー'
+  };
+
+  function renderSync() {
+    const st = Sync.status;
+    const show = (id, on) => { $(id).hidden = !on; };
+    $('#sync-status').textContent = st.message || STATUS_TEXT[st.state] || '';
+    $('#sync-status').dataset.state = st.state;
+    show('#sync-unavailable', st.state === 'unavailable');
+    show('#sync-setup-form', st.state === 'setup');
+    show('#sync-unlock-form', st.state === 'locked' && syncInfo.available);
+    show('#sync-connected', Sync.connected);
+    show('#sync-reload', st.state === 'login');
+    document.querySelectorAll('.sync-username').forEach((i) => { i.value = syncInfo.email || ''; });
+    if (Sync.connected) {
+      $('#sync-email').textContent = syncInfo.email || '—';
+      $('#sync-last').textContent = Store.lastSyncAt
+        ? new Date(Store.lastSyncAt).toLocaleString('ja-JP', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })
+        : 'まだ同期していません';
+      $('#sync-pending').textContent = `${Store.pendingCount}件`;
+      $('#sync-now').disabled = st.state === 'syncing';
+    }
+  }
+
+  function showFormError(id, msg) {
+    const p = $(id);
+    p.textContent = msg;
+    p.hidden = !msg;
+  }
+
+  async function withBusy(form, fn) {
+    const btn = form.querySelector('button[type="submit"]');
+    const label = btn.textContent;
+    btn.disabled = true;
+    btn.textContent = '処理中…';
+    try {
+      await fn();
+    } finally {
+      btn.disabled = false;
+      btn.textContent = label;
+    }
+  }
+
+  function initSync() {
+    Sync.onStatus(renderSync);
+    Store.onChange(() => { Sync.schedule(); renderSync(); });
+    document.addEventListener('kakeibo:remote-change', () => {
+      Store.applyRecurring(thisMonth());
+      updateMemoSuggestions();
+      render();
+    });
+    window.addEventListener('online', () => Sync.syncNow());
+    setInterval(() => { if (document.visibilityState === 'visible') Sync.syncNow(); }, 5 * 60 * 1000);
+
+    $('#sync-setup-form').addEventListener('submit', (ev) => {
+      ev.preventDefault();
+      const f = ev.target;
+      const pass = f.pass.value;
+      if (pass.length < 12) return showFormError('#sync-setup-error', '合言葉は12文字以上にしてください');
+      if (pass !== f.pass2.value) return showFormError('#sync-setup-error', '確認用の合言葉が一致しません');
+      if (!confirm('この合言葉を忘れるとクラウドのデータは復元できません。控えましたか？')) return;
+      showFormError('#sync-setup-error', '');
+      withBusy(f, async () => {
+        try {
+          await Sync.setup(pass);
+          f.reset();
+          toast('クラウド同期を開始しました');
+        } catch (e) {
+          showFormError('#sync-setup-error', e.code === 'already_initialized'
+            ? 'すでに別の端末で設定済みです。ページを再読み込みしてください'
+            : `設定に失敗しました（${e.code || e.message}）`);
+        }
+      });
+    });
+
+    $('#sync-unlock-form').addEventListener('submit', (ev) => {
+      ev.preventDefault();
+      const f = ev.target;
+      showFormError('#sync-unlock-error', '');
+      withBusy(f, async () => {
+        try {
+          await Sync.unlock(f.pass.value);
+          f.reset();
+          toast('この端末を接続しました');
+        } catch (e) {
+          showFormError('#sync-unlock-error', e.code === 'wrong_passphrase'
+            ? '合言葉が違います'
+            : `接続に失敗しました（${e.code || e.message}）`);
+        }
+      });
+    });
+
+    $('#sync-now').addEventListener('click', async () => {
+      await Sync.syncNow();
+      if (Sync.status.state === 'idle') toast('同期しました');
+    });
+    $('#sync-reload').addEventListener('click', () => location.reload());
+    $('#sync-disconnect').addEventListener('click', async () => {
+      if (!confirm('この端末の同期を解除しますか？\n（この端末の記録とクラウドのデータは残ります。再接続には合言葉が必要です）')) return;
+      await Sync.disconnect();
+      toast('同期を解除しました');
+    });
+
+    renderSync();
+    Sync.check().then((info) => {
+      syncInfo = info;
+      renderSync();
+      if (Sync.connected) Sync.syncNow();
+    });
   }
 
   function onMonthChange() {

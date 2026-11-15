@@ -8,7 +8,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-title" content="家計簿">
   <title>かんたん家計簿</title>
-  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="manifest" href="manifest.webmanifest" crossorigin="use-credentials">
   <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="icons/icon-192.png">
   <link rel="stylesheet" href="css/style.css">
@@ -36,6 +36,8 @@
     <symbol id="i-left" viewBox="0 0 24 24"><path d="m15 18-6-6 6-6"/></symbol>
     <symbol id="i-right" viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"/></symbol>
     <symbol id="i-trash" viewBox="0 0 24 24"><path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14"/></symbol>
+    <symbol id="i-cloud" viewBox="0 0 24 24"><path d="M17.5 19H7a5 5 0 1 1 1.1-9.9A6 6 0 0 1 19.6 11 4 4 0 0 1 17.5 19z"/></symbol>
+    <symbol id="i-lock" viewBox="0 0 24 24"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></symbol>
     <symbol id="i-repeat" viewBox="0 0 24 24"><path d="m17 2 4 4-4 4M3 11V9a3 3 0 0 1 3-3h15M7 22l-4-4 4-4M21 13v2a3 3 0 0 1-3 3H3"/></symbol>
   </svg>
 
@@ -137,6 +139,58 @@
     <section id="view-settings" class="view" aria-labelledby="settings-heading" hidden>
       <h2 id="settings-heading" class="view-title">設定</h2>
 
+      <section class="card" aria-labelledby="sync-heading">
+        <h3 id="sync-heading" class="card-title">
+          <svg class="icon" aria-hidden="true"><use href="#i-cloud"/></svg>クラウド同期
+        </h3>
+        <p class="sync-status" id="sync-status" role="status" aria-live="polite"></p>
+
+        <div id="sync-unavailable" hidden>
+          <p class="help">クラウド同期は Cloudflare で公開した版でのみ利用できます。この画面では記録はこの端末内にだけ保存されます。</p>
+        </div>
+
+        <form id="sync-setup-form" class="form" novalidate hidden>
+          <p class="help">
+            <svg class="icon icon-inline" aria-hidden="true"><use href="#i-lock"/></svg>
+            記録は合言葉で暗号化してから保存されるため、Cloudflare を含め誰も中身を読めません。
+            <strong>合言葉を忘れるとクラウドのデータは復元できません。</strong>安全な場所に控えてください。
+          </p>
+          <input type="text" name="username" class="visually-hidden sync-username" autocomplete="username" tabindex="-1" aria-hidden="true" readonly>
+          <div class="field">
+            <label class="label" for="sync-pass">合言葉（12文字以上）</label>
+            <input class="input" id="sync-pass" name="pass" type="password" autocomplete="new-password" minlength="12" required>
+          </div>
+          <div class="field">
+            <label class="label" for="sync-pass2">合言葉（確認）</label>
+            <input class="input" id="sync-pass2" name="pass2" type="password" autocomplete="new-password" minlength="12" required>
+          </div>
+          <p class="error" id="sync-setup-error" hidden></p>
+          <button type="submit" class="btn btn-primary">同期を開始</button>
+        </form>
+
+        <form id="sync-unlock-form" class="form" novalidate hidden>
+          <p class="help">別の端末で設定した合言葉を入力すると、この端末でも同じデータを使えます。</p>
+          <input type="text" name="username" class="visually-hidden sync-username" autocomplete="username" tabindex="-1" aria-hidden="true" readonly>
+          <div class="field">
+            <label class="label" for="sync-unlock-pass">合言葉</label>
+            <input class="input" id="sync-unlock-pass" name="pass" type="password" autocomplete="current-password" required>
+          </div>
+          <p class="error" id="sync-unlock-error" hidden></p>
+          <button type="submit" class="btn btn-primary">この端末を接続</button>
+        </form>
+
+        <div id="sync-connected" class="stack" hidden>
+          <dl class="sync-info">
+            <div><dt>アカウント</dt><dd id="sync-email"></dd></div>
+            <div><dt>最終同期</dt><dd id="sync-last"></dd></div>
+            <div><dt>未送信の変更</dt><dd id="sync-pending"></dd></div>
+          </dl>
+          <button type="button" class="btn btn-secondary" id="sync-now">今すぐ同期</button>
+          <button type="button" class="btn btn-ghost" id="sync-reload" hidden>再読み込みしてログイン</button>
+          <button type="button" class="btn btn-ghost" id="sync-disconnect">この端末の同期を解除</button>
+        </div>
+      </section>
+
       <section class="card" aria-labelledby="recurring-heading">
         <h3 id="recurring-heading" class="card-title">
           <svg class="icon" aria-hidden="true"><use href="#i-repeat"/></svg>毎月の固定費
@@ -169,7 +223,7 @@
 
       <section class="card" aria-labelledby="data-heading">
         <h3 id="data-heading" class="card-title">データ</h3>
-        <p class="help">データはこの端末のブラウザ内にのみ保存されます。機種変更に備えて定期的にバックアップしてください。</p>
+        <p class="help">記録はこの端末に保存されます。クラウド同期を有効にすると、暗号化したうえで Cloudflare にも保存されます。念のため定期的にバックアップも保存してください。</p>
         <div class="stack">
           <button type="button" class="btn btn-secondary" id="export-csv">CSVで書き出す（表計算ソフト用）</button>
           <button type="button" class="btn btn-secondary" id="export-json">バックアップを保存</button>
@@ -202,6 +256,7 @@
 
   <script src="js/categories.js"></script>
   <script src="js/store.js"></script>
+  <script src="js/sync.js"></script>
   <script src="js/app.js"></script>
 </body>
 </html>

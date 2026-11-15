@@ -400,3 +400,25 @@ input[type="radio"]:focus-visible + .category-option { outline: 3px solid var(--
   .category-grid { grid-template-columns: repeat(5, 1fr); }
   .form-actions { grid-template-columns: 1fr auto auto; }
 }
+
+/* ===== クラウド同期 ===== */
+.sync-status {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  margin-bottom: var(--space-2);
+  padding: 4px var(--space-1);
+  border-radius: var(--radius-sm);
+  font-size: 14px;
+  font-weight: 700;
+  background: var(--surface-2);
+  color: var(--text-sub);
+}
+.sync-status[data-state="idle"] { color: var(--primary); background: color-mix(in srgb, var(--primary) 14%, transparent); }
+.sync-status[data-state="error"],
+.sync-status[data-state="login"] { color: var(--danger); background: color-mix(in srgb, var(--danger) 12%, transparent); }
+.sync-info { display: grid; gap: var(--space-1); margin-bottom: var(--space-1); }
+.sync-info div { display: flex; justify-content: space-between; gap: var(--space-2); }
+.sync-info dt { color: var(--text-sub); font-size: 14px; }
+.sync-info dd { font-weight: 700; text-align: right; overflow-wrap: anywhere; }
+.icon-inline { width: 16px; height: 16px; vertical-align: -2px; }

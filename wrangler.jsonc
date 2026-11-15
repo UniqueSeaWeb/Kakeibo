@@ -1,0 +1,29 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "kakeibo",
+  "main": "src/worker.js",
+  "compatibility_date": "2026-10-28",
+  "workers_dev": true,
+  "preview_urls": false,
+  "assets": {
+    "directory": "./public",
+    "binding": "ASSETS",
+    "run_worker_first": ["/api/*"]
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "kakeibo",
+      "database_id": "REPLACE_WITH_D1_DATABASE_ID",
+      "migrations_dir": "migrations"
+    }
+  ],
+  "vars": {
+    // Cloudflare Access の設定値（秘密情報ではありません）
+    "TEAM_DOMAIN": "https://REPLACE_WITH_TEAM_NAME.cloudflareaccess.com",
+    "POLICY_AUD": "REPLACE_WITH_ACCESS_AUD_TAG",
+    // 利用を許可するメールアドレス（カンマ区切り）。Access のポリシーと二重で確認します
+    "ALLOWED_EMAILS": ""
+  },
+  "observability": { "enabled": true }
+}
