@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="description" content="外食・スーパー・コンビニ・光熱費・カーシェア・固定費をかんたんに記録できるスマホ向け家計簿">
+  <meta name="theme-color" content="#1f7a5c">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="家計簿">
+  <title>かんたん家計簿</title>
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="icons/icon-192.png">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <!-- SVG アイコン定義 -->
+  <svg xmlns="http://www.w3.org/2000/svg" class="sprite" aria-hidden="true">
+    <symbol id="i-dining" viewBox="0 0 24 24"><path d="M7 3v8M5 3v5a2 2 0 0 0 4 0V3M7 11v10M17 21V3c-2 1-3 4-3 7v3h3"/></symbol>
+    <symbol id="i-supermarket" viewBox="0 0 24 24"><path d="M3 4h2l2.4 11.2a1 1 0 0 0 1 .8h9.2a1 1 0 0 0 1-.8L20 8H6"/><circle cx="9" cy="20" r="1.5"/><circle cx="17" cy="20" r="1.5"/></symbol>
+    <symbol id="i-convenience" viewBox="0 0 24 24"><path d="M4 10v10h16V10M3 10l2-6h14l2 6zM10 20v-5h4v5"/></symbol>
+    <symbol id="i-electricity" viewBox="0 0 24 24"><path d="M13 2 4 14h7l-1 8 9-12h-7z"/></symbol>
+    <symbol id="i-water" viewBox="0 0 24 24"><path d="M12 3s-6 7-6 11a6 6 0 0 0 12 0c0-4-6-11-6-11z"/></symbol>
+    <symbol id="i-gas" viewBox="0 0 24 24"><path d="M12 22a7 7 0 0 0 7-7c0-4-3-6-4-10-2 2-3 4-3 6-1-1-2-2-2-4-2 2-5 5-5 8a7 7 0 0 0 7 7z"/></symbol>
+    <symbol id="i-carshare" viewBox="0 0 24 24"><path d="M5 17H3v-5l2-5h14l2 5v5h-2M5 12h14"/><circle cx="7.5" cy="17" r="2"/><circle cx="16.5" cy="17" r="2"/><path d="M9.5 17h5"/></symbol>
+    <symbol id="i-rent" viewBox="0 0 24 24"><path d="M3 11 12 4l9 7M5 10v10h14V10M10 20v-6h4v6"/></symbol>
+    <symbol id="i-telecom" viewBox="0 0 24 24"><rect x="7" y="2" width="10" height="20" rx="2"/><path d="M11 18h2"/></symbol>
+    <symbol id="i-subscription" viewBox="0 0 24 24"><path d="M20 12a8 8 0 1 1-2.3-5.7M20 4v4h-4"/><path d="M12 8v4l3 2"/></symbol>
+    <symbol id="i-insurance" viewBox="0 0 24 24"><path d="M12 3 4 6v6c0 5 3.5 8 8 9 4.5-1 8-4 8-9V6z"/><path d="m9 12 2 2 4-4"/></symbol>
+    <symbol id="i-fixed" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/></symbol>
+    <symbol id="i-other" viewBox="0 0 24 24"><circle cx="5" cy="12" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="19" cy="12" r="1.5"/></symbol>
+    <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+    <symbol id="i-list" viewBox="0 0 24 24"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></symbol>
+    <symbol id="i-chart" viewBox="0 0 24 24"><path d="M3 3v18h18M8 17v-5M13 17V8M18 17v-9"/></symbol>
+    <symbol id="i-settings" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></symbol>
+    <symbol id="i-left" viewBox="0 0 24 24"><path d="m15 18-6-6 6-6"/></symbol>
+    <symbol id="i-right" viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"/></symbol>
+    <symbol id="i-trash" viewBox="0 0 24 24"><path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14"/></symbol>
+    <symbol id="i-repeat" viewBox="0 0 24 24"><path d="m17 2 4 4-4 4M3 11V9a3 3 0 0 1 3-3h15M7 22l-4-4 4-4M21 13v2a3 3 0 0 1-3 3H3"/></symbol>
+  </svg>
+
+  <header class="app-header">
+    <h1 class="app-title">かんたん家計簿</h1>
+    <div class="month-nav" aria-label="表示する月">
+      <button type="button" class="icon-btn" id="prev-month" aria-label="前の月">
+        <svg class="icon" aria-hidden="true"><use href="#i-left"/></svg>
+      </button>
+      <output id="current-month" class="month-label" aria-live="polite"></output>
+      <button type="button" class="icon-btn" id="next-month" aria-label="次の月">
+        <svg class="icon" aria-hidden="true"><use href="#i-right"/></svg>
+      </button>
+    </div>
+  </header>
+
+  <main id="main">
+    <!-- 記録 -->
+    <section id="view-input" class="view" aria-labelledby="input-heading">
+      <h2 id="input-heading" class="view-title">支出を記録</h2>
+      <form id="entry-form" class="card form" novalidate>
+        <input type="hidden" name="id">
+        <fieldset class="category-picker">
+          <legend class="label">カテゴリ</legend>
+          <div id="category-options" class="category-grid"></div>
+        </fieldset>
+        <div class="field">
+          <label class="label" for="amount">金額（円）</label>
+          <input class="input input-amount" id="amount" name="amount" type="text" inputmode="numeric" pattern="[0-9,]*" autocomplete="off" placeholder="0" required>
+          <p class="error" id="amount-error" hidden>1円以上の金額を入力してください</p>
+        </div>
+        <div class="field">
+          <label class="label" for="date">日付</label>
+          <input class="input" id="date" name="date" type="date" required>
+        </div>
+        <div class="field">
+          <label class="label" for="memo">メモ（店名・内容など）</label>
+          <input class="input" id="memo" name="memo" type="text" maxlength="100" autocomplete="off" list="memo-suggestions">
+          <datalist id="memo-suggestions"></datalist>
+        </div>
+        <div class="form-actions">
+          <button type="submit" class="btn btn-primary" id="submit-btn">記録する</button>
+          <button type="button" class="btn btn-ghost" id="cancel-edit" hidden>編集をやめる</button>
+          <button type="button" class="btn btn-danger" id="delete-entry" hidden>
+            <svg class="icon" aria-hidden="true"><use href="#i-trash"/></svg>削除
+          </button>
+        </div>
+      </form>
+
+      <section class="card" aria-labelledby="quick-heading">
+        <h3 id="quick-heading" class="card-title">今月のまとめ</h3>
+        <dl class="quick-summary" id="quick-summary"></dl>
+      </section>
+    </section>
+
+    <!-- 一覧 -->
+    <section id="view-list" class="view" aria-labelledby="list-heading" hidden>
+      <h2 id="list-heading" class="view-title">明細</h2>
+      <div class="field">
+        <label class="label" for="list-filter">カテゴリで絞り込み</label>
+        <select class="input" id="list-filter">
+          <option value="">すべて</option>
+        </select>
+      </div>
+      <div id="entry-list"></div>
+    </section>
+
+    <!-- 集計 -->
+    <section id="view-summary" class="view" aria-labelledby="summary-heading" hidden>
+      <h2 id="summary-heading" class="view-title">集計</h2>
+      <section class="card total-card" aria-label="月の合計">
+        <p class="total-label">月の支出合計</p>
+        <p class="total-amount" id="month-total"></p>
+        <p class="total-diff" id="month-diff"></p>
+      </section>
+
+      <section class="card" aria-labelledby="group-heading">
+        <h3 id="group-heading" class="card-title">分類別</h3>
+        <div id="group-summary" class="group-summary"></div>
+      </section>
+
+      <section class="card" aria-labelledby="cat-heading">
+        <h3 id="cat-heading" class="card-title">カテゴリ別</h3>
+        <ul id="category-summary" class="bar-list"></ul>
+      </section>
+
+      <section class="card" aria-labelledby="trend-heading">
+        <h3 id="trend-heading" class="card-title">12か月の推移</h3>
+        <div class="field">
+          <label class="label" for="trend-category">対象</label>
+          <select class="input" id="trend-category"></select>
+        </div>
+        <div id="trend-chart" class="trend-chart"></div>
+        <p class="trend-note" id="trend-note"></p>
+      </section>
+    </section>
+
+    <!-- 設定 -->
+    <section id="view-settings" class="view" aria-labelledby="settings-heading" hidden>
+      <h2 id="settings-heading" class="view-title">設定</h2>
+
+      <section class="card" aria-labelledby="recurring-heading">
+        <h3 id="recurring-heading" class="card-title">
+          <svg class="icon" aria-hidden="true"><use href="#i-repeat"/></svg>毎月の固定費
+        </h3>
+        <p class="help">家賃・通信費・サブスクなど毎月同じ金額の支出を登録すると、毎月自動で記録されます。</p>
+        <ul id="recurring-list" class="recurring-list"></ul>
+        <form id="recurring-form" class="form recurring-form" novalidate>
+          <div class="field">
+            <label class="label" for="rec-category">カテゴリ</label>
+            <select class="input" id="rec-category" name="category" required></select>
+          </div>
+          <div class="field-row">
+            <div class="field">
+              <label class="label" for="rec-amount">金額（円）</label>
+              <input class="input" id="rec-amount" name="amount" type="text" inputmode="numeric" pattern="[0-9,]*" autocomplete="off" required>
+            </div>
+            <div class="field">
+              <label class="label" for="rec-day">毎月の日</label>
+              <select class="input" id="rec-day" name="day"></select>
+            </div>
+          </div>
+          <div class="field">
+            <label class="label" for="rec-memo">メモ</label>
+            <input class="input" id="rec-memo" name="memo" type="text" maxlength="100" autocomplete="off" placeholder="例：家賃、スマホ代">
+          </div>
+          <p class="error" id="rec-error" hidden>1円以上の金額を入力してください</p>
+          <button type="submit" class="btn btn-secondary">固定費を追加</button>
+        </form>
+      </section>
+
+      <section class="card" aria-labelledby="data-heading">
+        <h3 id="data-heading" class="card-title">データ</h3>
+        <p class="help">データはこの端末のブラウザ内にのみ保存されます。機種変更に備えて定期的にバックアップしてください。</p>
+        <div class="stack">
+          <button type="button" class="btn btn-secondary" id="export-csv">CSVで書き出す（表計算ソフト用）</button>
+          <button type="button" class="btn btn-secondary" id="export-json">バックアップを保存</button>
+          <label class="btn btn-secondary file-btn">
+            バックアップから復元
+            <input type="file" id="import-json" accept="application/json,.json" class="visually-hidden">
+          </label>
+          <button type="button" class="btn btn-danger" id="clear-all">すべてのデータを削除</button>
+        </div>
+      </section>
+    </section>
+  </main>
+
+  <nav class="tab-bar" aria-label="メインメニュー">
+    <button type="button" class="tab" data-view="input" aria-current="page">
+      <svg class="icon" aria-hidden="true"><use href="#i-plus"/></svg><span>記録</span>
+    </button>
+    <button type="button" class="tab" data-view="list">
+      <svg class="icon" aria-hidden="true"><use href="#i-list"/></svg><span>明細</span>
+    </button>
+    <button type="button" class="tab" data-view="summary">
+      <svg class="icon" aria-hidden="true"><use href="#i-chart"/></svg><span>集計</span>
+    </button>
+    <button type="button" class="tab" data-view="settings">
+      <svg class="icon" aria-hidden="true"><use href="#i-settings"/></svg><span>設定</span>
+    </button>
+  </nav>
+
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+  <script src="js/categories.js"></script>
+  <script src="js/store.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
