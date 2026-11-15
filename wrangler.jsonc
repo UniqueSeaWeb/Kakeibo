@@ -20,10 +20,10 @@
   ],
   "vars": {
     // Cloudflare Access の設定値（秘密情報ではありません）
-    "TEAM_DOMAIN": "https://REPLACE_WITH_TEAM_NAME.cloudflareaccess.com",
-    "POLICY_AUD": "REPLACE_WITH_ACCESS_AUD_TAG",
-    // 利用を許可するメールアドレス（カンマ区切り）。Access のポリシーと二重で確認します
-    "ALLOWED_EMAILS": ""
+    "TEAM_DOMAIN": "https://wild-haze-46c6.cloudflareaccess.com",
+    "POLICY_AUD": "REPLACE_WITH_ACCESS_AUD_TAG"
+    // 利用を許可するメールアドレス（ALLOWED_EMAILS, カンマ区切り）は個人情報のため
+    // `npx wrangler secret put ALLOWED_EMAILS` でシークレットとして登録します
   },
   "observability": { "enabled": true }
 }
